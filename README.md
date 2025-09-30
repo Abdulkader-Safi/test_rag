@@ -2,6 +2,10 @@
 
 A Retrieval-Augmented Generation (RAG) system that processes PDF documents with OCR support and enables question-answering using local LLMs via Ollama.
 
+![PDF RAG SYSTEM](https://abdulkadersafi.com/storage/158/01K6E35JVPR2MCC56CRHNWRNDP.png)
+
+> Read Blog Article [Here](https://abdulkadersafi.com/blog/retrieval-augmented-generation-rag-with-local-pdfs-and-ollama-a-developers-guide)
+
 ## Features
 
 - **PDF Text Extraction**: Extracts text from PDF documents using PyMuPDF
@@ -22,11 +26,13 @@ A Retrieval-Augmented Generation (RAG) system that processes PDF documents with 
 ## Installation
 
 1. Install Tesseract OCR:
+
    - **macOS**: `brew install tesseract`
    - **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
    - **Windows**: Download from [GitHub](https://github.com/UB-Mannheim/tesseract/wiki)
 
 2. Install Ollama and pull a model:
+
    ```bash
    # Install Ollama from https://ollama.ai
    ollama pull mistral
@@ -99,6 +105,7 @@ OCR_IMAGE_MAX_SIZE = 2000          # Max image dimension for OCR
 ## Dependencies
 
 Key libraries:
+
 - **LangChain**: Framework for LLM applications
 - **FAISS**: Vector similarity search
 - **PyMuPDF**: PDF processing
