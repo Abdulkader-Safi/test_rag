@@ -4,3 +4,4 @@ vector_index/*
 !vector_index/.gitkeep
 my_pdfs/*
 !my_pdfs/.gitkeep
+.pdf_cache
