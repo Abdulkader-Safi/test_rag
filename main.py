@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
+os.environ["LANGCHAIN_SUPPRESS_WARNINGS"] = "true"
 
 from langchain.chains import RetrievalQA
 from langchain.docstore.document import Document
@@ -23,6 +24,7 @@ from langchain_community.vectorstores import PGVector
 from langchain_community.chat_models import ChatOllama
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
+
 
 # Load environment variables
 load_dotenv()
@@ -202,7 +204,6 @@ def load_pdfs(pdf_dir: Path) -> List[Document]:
 
     return all_docs
 
-
 def chunk_docs(docs: List[Document]) -> List[Document]:
     """Chunk documents with parallel processing"""
     splitter = RecursiveCharacterTextSplitter(
@@ -228,7 +229,6 @@ def chunk_docs(docs: List[Document]) -> List[Document]:
 
     return all_chunks
 
-
 def get_embeddings():
     """Get embeddings model with singleton pattern"""
     global _EMBEDDINGS_MODEL
@@ -247,7 +247,6 @@ def get_llm():
         num_predict=8112,  # Allow longer responses for structured output
     )
 
-
 def ensure_index():
     """Initialize or connect to PostgreSQL vector store"""
     # Initialize connection to existing vectors
@@ -258,7 +257,6 @@ def ensure_index():
     )
 
     return vs
-
 
 def add_pdfs_to_index(pdf_paths: List[Path] | None = None):
     """Add new PDFs to the PostgreSQL vector store"""
@@ -301,7 +299,6 @@ def add_pdfs_to_index(pdf_paths: List[Path] | None = None):
             except Exception:
                 pass
 
-
 def make_qa_chain(vs: PGVector):
     retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": TOP_K})
     llm = get_llm()
@@ -313,20 +310,16 @@ def make_qa_chain(vs: PGVector):
     )
 
 
-def ask(qa, query: str):
-    result = qa({"query": query})
-    print(result["result"])
-
-
 if __name__ == "__main__":
     import argparse
     import sys
+    from rich.console import Console
+    from rich.panel import Panel
 
     # Suppress stderr to hide all warnings
     sys.stderr = open(os.devnull, 'w')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-q", "--query", help="Your question")
     parser.add_argument(
         "--add-pdfs", action="store_true", help="Add PDFs from my_pdfs directory to vector store"
     )
@@ -335,26 +328,58 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    console = Console()
+
     vs = None
     qa = None
     try:
         if args.clear:
-            print("Clearing vector store...")
+            console.print("[bold yellow]Clearing vector store...[/bold yellow]")
             vs = ensure_index()
             vs.delete_collection()
-            print("Vector store cleared successfully.")
+            console.print("[bold green]Vector store cleared successfully.[/bold green]")
             sys.exit(0)
 
         if args.add_pdfs:
             add_pdfs_to_index()
             sys.exit(0)
 
-        if not args.query:
-            parser.error("--query is required unless using --add-pdfs or --clear")
+        with console.status("[bold green]Initializing QA chain...[/bold green]"):
+            vs = ensure_index()
+            qa = make_qa_chain(vs)
+        
+        console.print("[bold green]Starting interactive chat. Type 'exit' or press Ctrl+C to quit.[/bold green]")
+        
+        while True:
+            try:
+                query = console.input("[bold cyan]> [/bold cyan]")
+                if query.lower() == 'exit':
+                    break
 
-        vs = ensure_index()
-        qa = make_qa_chain(vs)
-        ask(qa, args.query)
+                console.print("[bold green]Answer:[/bold green] ", end="")
+                source_documents = []
+                
+                for chunk in qa.stream({"query": query}):
+                    if "result" in chunk:
+                        console.print(chunk["result"], end="", style="")
+                    if "source_documents" in chunk:
+                        source_documents.extend(chunk["source_documents"])
+                
+                console.print()
+
+                if source_documents:
+                    console.print("\n[bold]Source Documents:[/bold]")
+                    for doc in source_documents:
+                        console.print(Panel(
+                            f"[cyan]{doc.metadata['source']}[/cyan] (Page {doc.metadata.get('page', 'N/A')})\n\n{doc.page_content}",
+                            title=f"[bold yellow]Source[/bold yellow]",
+                            border_style="yellow"
+                        ))
+
+            except KeyboardInterrupt:
+                console.print("\n[bold red]Exiting...[/bold red]")
+                break
+
     finally:
         # Explicitly clean up in reverse order
         if qa is not None:
