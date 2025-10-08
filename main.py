@@ -11,6 +11,7 @@ from functools import lru_cache
 import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
+from dotenv import load_dotenv
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
@@ -18,19 +19,30 @@ warnings.filterwarnings("ignore")
 from langchain.chains import RetrievalQA
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import PGVector
 from langchain_community.chat_models import ChatOllama
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
+# Load environment variables
+load_dotenv()
+
 # --- Config ---
 DATA_DIR = Path("./my_pdfs")  # put PDFs here
-INDEX_DIR = Path("./vector_index")  # FAISS index
 CACHE_DIR = Path("./.pdf_cache")  # Cache for extracted text
 TOP_K = 3  # Reduced from 4 for faster retrieval
 OLLAMA_MODEL = "mistral"  # or "mistral", "phi", etc.
 MAX_WORKERS = 4  # Parallel processing workers
 OCR_IMAGE_MAX_SIZE = 2000  # Max image dimension for OCR
+
+# PostgreSQL connection
+COLLECTION_NAME = "pdf_embeddings"
+_connection_string = os.getenv("DATABASE_URL")
+
+if not _connection_string:
+    raise ValueError("DATABASE_URL environment variable not set")
+
+CONNECTION_STRING: str = _connection_string
 
 # Singleton for embeddings model
 _EMBEDDINGS_MODEL = None
@@ -232,33 +244,65 @@ def get_llm():
         model=OLLAMA_MODEL,
         temperature=0,
         num_ctx=2048,  # Reduced context window for faster inference
-        num_predict=4096,  # Allow longer responses for structured output
+        num_predict=8112,  # Allow longer responses for structured output
     )
 
 
 def ensure_index():
-    INDEX_DIR.mkdir(parents=True, exist_ok=True)
+    """Initialize or connect to PostgreSQL vector store"""
+    # Initialize connection to existing vectors
+    vs = PGVector(
+        collection_name=COLLECTION_NAME,
+        connection_string=CONNECTION_STRING,
+        embedding_function=get_embeddings(),
+    )
 
-    # Check if index already exists
-    if (INDEX_DIR / "index.faiss").exists():
-        return FAISS.load_local(
-            folder_path=str(INDEX_DIR),
-            embeddings=get_embeddings(),
-            allow_dangerous_deserialization=True,
-        )
-
-    # Index doesn't exist, need to build it
-    docs = load_pdfs(DATA_DIR)
-    if not docs:
-        raise RuntimeError("No PDFs found in directory.")
-    chunks = chunk_docs(docs)
-
-    vs = FAISS.from_documents(chunks, get_embeddings())
-    vs.save_local(str(INDEX_DIR))
     return vs
 
 
-def make_qa_chain(vs: FAISS):
+def add_pdfs_to_index(pdf_paths: List[Path] | None = None):
+    """Add new PDFs to the PostgreSQL vector store"""
+    if pdf_paths is None:
+        # Process all PDFs in directory
+        pdf_paths = list(DATA_DIR.glob("**/*.pdf"))
+
+    if not pdf_paths:
+        print("No PDFs to process.")
+        return
+
+    # Load and process PDFs
+    all_docs = []
+    for pdf_path in pdf_paths:
+        print(f"Processing: {pdf_path.name}")
+        docs = _load_single_pdf(pdf_path)
+        all_docs.extend(docs)
+
+    if not all_docs:
+        raise RuntimeError("No content extracted from PDFs.")
+
+    # Chunk documents
+    chunks = chunk_docs(all_docs)
+    print(f"Adding {len(chunks)} chunks to vector store...")
+
+    # Add to PostgreSQL
+    vs = None
+    try:
+        vs = PGVector.from_documents(
+            documents=chunks,
+            embedding=get_embeddings(),
+            collection_name=COLLECTION_NAME,
+            connection_string=CONNECTION_STRING,
+        )
+        print(f"Successfully added {len(chunks)} chunks from {len(pdf_paths)} PDFs.")
+    finally:
+        if vs is not None:
+            try:
+                del vs
+            except Exception:
+                pass
+
+
+def make_qa_chain(vs: PGVector):
     retriever = vs.as_retriever(search_type="similarity", search_kwargs={"k": TOP_K})
     llm = get_llm()
     return RetrievalQA.from_chain_type(
@@ -282,16 +326,44 @@ if __name__ == "__main__":
     sys.stderr = open(os.devnull, 'w')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-q", "--query", required=True, help="Your question")
+    parser.add_argument("-q", "--query", help="Your question")
     parser.add_argument(
-        "--rebuild", action="store_true", help="Rebuild the FAISS index"
+        "--add-pdfs", action="store_true", help="Add PDFs from my_pdfs directory to vector store"
+    )
+    parser.add_argument(
+        "--clear", action="store_true", help="Clear all vectors from the database"
     )
     args = parser.parse_args()
 
-    if args.rebuild and INDEX_DIR.exists():
-        for p in INDEX_DIR.glob("*"):
-            p.unlink()
+    vs = None
+    qa = None
+    try:
+        if args.clear:
+            print("Clearing vector store...")
+            vs = ensure_index()
+            vs.delete_collection()
+            print("Vector store cleared successfully.")
+            sys.exit(0)
 
-    vs = ensure_index()
-    qa = make_qa_chain(vs)
-    ask(qa, args.query)
+        if args.add_pdfs:
+            add_pdfs_to_index()
+            sys.exit(0)
+
+        if not args.query:
+            parser.error("--query is required unless using --add-pdfs or --clear")
+
+        vs = ensure_index()
+        qa = make_qa_chain(vs)
+        ask(qa, args.query)
+    finally:
+        # Explicitly clean up in reverse order
+        if qa is not None:
+            try:
+                del qa
+            except Exception:
+                pass
+        if vs is not None:
+            try:
+                del vs
+            except Exception:
+                pass
