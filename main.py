@@ -232,7 +232,7 @@ def get_llm():
         model=OLLAMA_MODEL,
         temperature=0,
         num_ctx=2048,  # Reduced context window for faster inference
-        num_predict=256,  # Limit response length for faster generation
+        num_predict=4096,  # Allow longer responses for structured output
     )
 
 
