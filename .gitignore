@@ -2,6 +2,7 @@
 .venv
 .vscode
 
+__pycache__
 vector_index/*
 !vector_index/.gitkeep
 my_pdfs/*
