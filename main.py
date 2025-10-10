@@ -1,6 +1,11 @@
 import io
 import os
+import sys
 import warnings
+
+# Redirect stderr immediately to suppress all warnings
+sys.stderr = open(os.devnull, 'w')
+
 from pathlib import Path
 from typing import List
 import hashlib
@@ -16,12 +21,17 @@ from dotenv import load_dotenv
 # Suppress all warnings
 warnings.filterwarnings("ignore")
 os.environ["LANGCHAIN_SUPPRESS_WARNINGS"] = "true"
+os.environ["PYTHONWARNINGS"] = "ignore"
+
+# Suppress specific deprecation warnings
+import logging
+logging.getLogger("langchain").setLevel(logging.ERROR)
 
 from langchain.chains import RetrievalQA
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import PGVector
-from langchain_community.chat_models import ChatOllama
+from langchain_community.llms import Ollama
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
@@ -240,7 +250,7 @@ def get_embeddings():
 
 
 def get_llm():
-    return ChatOllama(
+    return Ollama(
         model=OLLAMA_MODEL,
         temperature=0,
         num_ctx=2048,  # Reduced context window for faster inference
@@ -312,12 +322,8 @@ def make_qa_chain(vs: PGVector):
 
 if __name__ == "__main__":
     import argparse
-    import sys
     from rich.console import Console
     from rich.panel import Panel
-
-    # Suppress stderr to hide all warnings
-    sys.stderr = open(os.devnull, 'w')
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -325,6 +331,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--clear", action="store_true", help="Clear all vectors from the database"
+    )
+    parser.add_argument(
+        "-q", "--query", type=str, help="Ask a single question and exit"
     )
     args = parser.parse_args()
 
@@ -347,9 +356,18 @@ if __name__ == "__main__":
         with console.status("[bold green]Initializing QA chain...[/bold green]"):
             vs = ensure_index()
             qa = make_qa_chain(vs)
-        
+
+        # Handle single query mode
+        if args.query:
+            for chunk in qa.stream({"query": args.query}):
+                if "result" in chunk:
+                    console.print(chunk["result"], end="", style="")
+
+            console.print()
+            sys.exit(0)
+
         console.print("[bold green]Starting interactive chat. Type 'exit' or press Ctrl+C to quit.[/bold green]")
-        
+
         while True:
             try:
                 query = console.input("[bold cyan]> [/bold cyan]")
