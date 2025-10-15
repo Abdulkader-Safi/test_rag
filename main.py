@@ -14,8 +14,8 @@ from src.qa_chain import make_qa_chain
 # Store original stderr for error output
 _original_stderr = sys.stderr
 
-# Temporarily disable stderr redirection for debugging
-# sys.stderr = open(os.devnull, "w")
+# Redirect stderr immediately to suppress all warnings
+sys.stderr = open(os.devnull, "w")
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
@@ -35,7 +35,9 @@ class StreamingCallbackHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs) -> None:
         """Run on new LLM token. Only available when streaming is enabled."""
-        self.console.print(token, end="", style="")
+        # Flush immediately to ensure real-time display
+        self.console.print(token, end="")
+        sys.stdout.flush()
 
 
 def main():

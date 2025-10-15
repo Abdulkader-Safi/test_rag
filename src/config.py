@@ -13,7 +13,7 @@ CACHE_DIR = Path("./.pdf_cache")  # Cache for extracted text
 
 # --- Model Configuration ---
 TOP_K = 3  # Number of documents to retrieve
-OLLAMA_MODEL = "llava"  # or "phi", "llama2", etc.
+OLLAMA_MODEL = "mistral"  # or "phi", "llama2", etc.
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # --- Performance Settings ---
