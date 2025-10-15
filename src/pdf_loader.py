@@ -1,6 +1,6 @@
 """PDF loading and text extraction with OCR support"""
+
 import warnings
-warnings.filterwarnings("ignore")
 
 import io
 import hashlib
@@ -17,6 +17,8 @@ from langchain_community.document_loaders import PyPDFLoader
 
 from .config import CACHE_DIR, MAX_WORKERS, OCR_IMAGE_MAX_SIZE
 
+warnings.filterwarnings("ignore")
+
 
 def _get_image_hash(image_bytes: bytes) -> str:
     """Calculate hash for image deduplication"""
@@ -32,8 +34,8 @@ def _preprocess_image(image: Image.Image) -> Image.Image:
         image = image.resize(new_size, Image.Resampling.LANCZOS)
 
     # Convert to grayscale for faster OCR
-    if image.mode != 'L':
-        image = image.convert('L')
+    if image.mode != "L":
+        image = image.convert("L")
 
     return image
 
@@ -120,11 +122,11 @@ def _load_single_pdf(pdf_path: Path) -> List[Document]:
     # Check cache
     if cache_path.exists():
         try:
-            with open(cache_path, 'rb') as f:
+            with open(cache_path, "rb") as f:
                 cached_data = pickle.load(f)
-                if cached_data['mtime'] == current_mtime:
+                if cached_data["mtime"] == current_mtime:
                     print(f"[CACHE HIT] Loading from cache: {pdf_path.name}")
-                    return cached_data['docs']
+                    return cached_data["docs"]
         except Exception:
             pass
 
@@ -143,8 +145,8 @@ def _load_single_pdf(pdf_path: Path) -> List[Document]:
 
     # Cache results
     try:
-        with open(cache_path, 'wb') as f:
-            pickle.dump({'mtime': current_mtime, 'docs': docs}, f)
+        with open(cache_path, "wb") as f:
+            pickle.dump({"mtime": current_mtime, "docs": docs}, f)
         print(f"[CACHED] Saved to cache: {pdf_path.name}")
     except Exception:
         pass
@@ -162,7 +164,9 @@ def load_pdfs(pdf_dir: Path) -> List[Document]:
     # Process PDFs in parallel
     all_docs = []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_to_pdf = {executor.submit(_load_single_pdf, pdf): pdf for pdf in pdf_files}
+        future_to_pdf = {
+            executor.submit(_load_single_pdf, pdf): pdf for pdf in pdf_files
+        }
         for future in as_completed(future_to_pdf):
             try:
                 docs = future.result()

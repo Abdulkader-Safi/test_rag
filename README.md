@@ -89,7 +89,7 @@ A powerful Retrieval-Augmented Generation (RAG) system for querying PDF document
 **Single Query Mode** (returns only the answer):
 
 ```bash
-python main.py -q "What are the main topics in these documents?"
+python main.py -q "What are the main topics in these documents?****"
 ```
 
 **Interactive Mode** (with source documents):

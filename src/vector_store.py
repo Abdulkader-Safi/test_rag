@@ -1,6 +1,6 @@
 """Vector store operations using PostgreSQL"""
+
 import warnings
-warnings.filterwarnings("ignore")
 
 from pathlib import Path
 from typing import List
@@ -18,10 +18,11 @@ from .config import (
     CHUNK_OVERLAP,
     MAX_WORKERS,
     EMBEDDING_MODEL,
-    DATA_DIR
+    DATA_DIR,
 )
 from .pdf_loader import _load_single_pdf
 
+warnings.filterwarnings("ignore")
 
 # Singleton for embeddings model
 _EMBEDDINGS_MODEL = None
@@ -31,9 +32,7 @@ def get_embeddings():
     """Get embeddings model with singleton pattern"""
     global _EMBEDDINGS_MODEL
     if _EMBEDDINGS_MODEL is None:
-        _EMBEDDINGS_MODEL = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL
-        )
+        _EMBEDDINGS_MODEL = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
     return _EMBEDDINGS_MODEL
 
 
@@ -42,7 +41,7 @@ def chunk_docs(docs: List[Document]) -> List[Document]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", ""]
+        separators=["\n\n", "\n", " ", ""],
     )
 
     # Split documents in parallel batches
@@ -50,11 +49,13 @@ def chunk_docs(docs: List[Document]) -> List[Document]:
         return splitter.split_documents(docs)
 
     batch_size = max(1, len(docs) // MAX_WORKERS)
-    batches = [docs[i:i + batch_size] for i in range(0, len(docs), batch_size)]
+    batches = [docs[i : i + batch_size] for i in range(0, len(docs), batch_size)]
 
     all_chunks = []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [executor.submit(splitter.split_documents, batch) for batch in batches]
+        futures = [
+            executor.submit(splitter.split_documents, batch) for batch in batches
+        ]
         for future in as_completed(futures):
             try:
                 chunks = future.result()
