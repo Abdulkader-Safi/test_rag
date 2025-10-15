@@ -11,8 +11,11 @@ from langchain.callbacks.base import BaseCallbackHandler
 from src.vector_store import ensure_index, add_pdfs_to_index
 from src.qa_chain import make_qa_chain
 
-# Redirect stderr immediately to suppress all warnings
-sys.stderr = open(os.devnull, "w")
+# Store original stderr for error output
+_original_stderr = sys.stderr
+
+# Temporarily disable stderr redirection for debugging
+# sys.stderr = open(os.devnull, "w")
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
@@ -81,8 +84,16 @@ def main():
         # Handle single query mode
         if args.query:
             console.print("[bold green]Answer:[/bold green] ", end="")
-            result = qa({"query": args.query})
-            console.print()
+            try:
+                result = qa({"query": args.query})
+                console.print()
+                if not result:
+                    console.print("[yellow]No result returned from query[/yellow]")
+            except Exception as e:
+                sys.stderr = _original_stderr
+                console.print(f"\n[bold red]Error during query:[/bold red] {e}")
+                import traceback
+                traceback.print_exc()
             sys.exit(0)
 
         # Interactive mode

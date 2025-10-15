@@ -4,7 +4,7 @@ This PDF RAG (Retrieval-Augmented Generation) system has been organized into mod
 
 ## Directory Structure
 
-```
+```folder
 test_rag/
 ├── main.py                 # Main entry point and CLI interface
 ├── src/                    # Source code modules

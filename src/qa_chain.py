@@ -18,7 +18,6 @@ def get_llm(streaming=False, callbacks=None):
         temperature=LLM_TEMPERATURE,
         num_ctx=LLM_NUM_CTX,
         num_predict=LLM_NUM_PREDICT,
-        streaming=streaming,
         callbacks=callbacks,
     )
 
